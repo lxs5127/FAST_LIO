@@ -27,7 +27,7 @@
 
 /// *************Preconfiguration
 
-#define MAX_INI_COUNT (10)
+#define MAX_INI_COUNT (2000)
 
 const bool time_list(PointType &x, PointType &y) {return (x.curvature < y.curvature);};
 
@@ -193,7 +193,15 @@ void ImuProcess::IMU_init(const MeasureGroup &meas, esekfom::esekf<state_ikfom, 
     N ++;
   }
   state_ikfom init_state = kf_state.get_x();
-  init_state.grav = S2(- mean_acc / mean_acc.norm() * G_m_s2);
+  // 重力对齐: 用静止时加速度计的均值把 body 的 "上" 方向转到世界系 +Z,
+  // 这样起手斜着拿也能建出地面水平的地图。
+  // 注意: 初始化采样期间必须保持静止, 否则 mean_acc 会被运动加速度污染。
+  const V3D body_up = mean_acc.normalized();
+  const V3D world_up(0.0, 0.0, 1.0);
+  const Eigen::Quaterniond q_body_to_world =
+      Eigen::Quaterniond::FromTwoVectors(body_up, world_up);
+  init_state.rot  = MTK::SO3<double>(q_body_to_world.normalized().toRotationMatrix());
+  init_state.grav = S2(V3D(0.0, 0.0, -G_m_s2));
   
   //state_inout.rot = Eye3d; // Exp(mean_acc.cross(V3D(0, 0, -1 / scale_gravity)));
   init_state.bg  = mean_gyr;
